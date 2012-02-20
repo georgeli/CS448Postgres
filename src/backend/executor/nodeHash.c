@@ -35,19 +35,17 @@ static void ExecHashIncreaseNumBatches(HashJoinTable hashtable);
 
 
 /* ----------------------------------------------------------------
- *		ExecHash
- *
- *		stub for pro forma compliance
+ *		ExecHash, CS448
+ * 		
+ * 		Your implementation of ExecHash should obtain tuple from 
+ * 		its input, insert the tuple in to the hash table, and 
+ * 		return the tuple to its caller.
  * ----------------------------------------------------------------
  */
 TupleTableSlot *
 ExecHash(HashState *node)
 {
-	/*
-	 * 448
-	 * Your implementation of ExecHash should obtain tuple from its input, 
-	 * insert the tuple in to the hash table, and return the tuple to its caller.
-	 */
+	
 	PlanState  *outerNode;
 	List	   *hashkeys;
 	HashJoinTable hashtable;
@@ -91,6 +89,10 @@ ExecHash(HashState *node)
  *		build hash table for hashjoin, doing partitioning if more
  *		than one batch is required.
  * ----------------------------------------------------------------
+ * 		CS448
+ * 		
+ * 		This is no longer needed for a symmetric hash join.
+ * ---------------------------------------------------------------- 
  */
 Node *
 MultiExecHash(HashState *node)
@@ -792,7 +794,7 @@ ExecScanHashBucket(HashJoinState *hjstate,
 				   ExprContext *econtext)
 {
 	List	   *hjclauses = hjstate->hashclauses;
-	HashJoinTable hashtable = hjstate->hj_HashTable;
+	HashJoinTable hashtable = hjstate->hj_FromInner ? hjstate->hj_OuterTable : hjstate->hj_InnerTable;
 	HashJoinTuple hashTuple = hjstate->hj_CurTuple;
 	uint32		hashvalue = hjstate->hj_CurHashValue;
 
@@ -814,7 +816,7 @@ ExecScanHashBucket(HashJoinState *hjstate,
 
 			/* insert hashtable's tuple into exec slot so ExecQual sees it */
 			inntuple = ExecStoreTuple(heapTuple,
-									  hjstate->hj_HashTupleSlot,
+									  hjstate->hj_FromInner ? hjstate->hj_OuterTupleSlot : hjstate->hj_InnerTupleSlot,
 									  InvalidBuffer,
 									  false);	/* do not pfree */
 			econtext->ecxt_innertuple = inntuple;
