@@ -63,9 +63,11 @@ ExecHashJoin(HashJoinState *node)
 	uint32		hashvalue;
 	int			batchno;
 
+	elog(INFO, "Starting hash join");
 	/*
 	 * get information from HashJoin node
 	 */
+	elog(INFO, "Getting information from HashJoin node.");
 	joinqual = node->js.joinqual;
 	otherqual = node->js.ps.qual;
 	innerNode = (HashState *) innerPlanState(node);
@@ -74,6 +76,7 @@ ExecHashJoin(HashJoinState *node)
 	/*
 	 * get information from HashJoin state
 	 */
+	elog(INFO, "Getting information from HashJoin state.");
 	innertable = node->hj_InnerTable;
 	outertable = node->hj_OuterTable;
 	econtext = node->js.ps.ps_ExprContext;
@@ -83,9 +86,11 @@ ExecHashJoin(HashJoinState *node)
 	 * tuple (because there is a function-returning-set in the projection
 	 * expressions).  If so, try to project another one.
 	 */
+	elog(INFO, "Check for Projection.");
 	if (node->js.ps.ps_TupFromTlist)
 	{
 		TupleTableSlot *result;
+		elog(INFO, "Projecting.");
 
 		result = ExecProject(node->js.ps.ps_ProjInfo, &isDone);
 		if (isDone == ExprMultipleResult)
@@ -99,6 +104,7 @@ ExecHashJoin(HashJoinState *node)
 	 * tuple; so we can stop scanning the inner scan if we matched on the
 	 * previous try.
 	 */
+	elog(INFO, "Checking for IN Join");
 	if (node->js.jointype == JOIN_IN && node->hj_MatchedTuple)
 		node->hj_NeedNew = true;
 
@@ -114,6 +120,7 @@ ExecHashJoin(HashJoinState *node)
 	 */
 	if (innertable == NULL)
 	{
+		elog(INFO, "Building hash tables");
 		/*
 		 * create the hash table
 		 */
@@ -148,12 +155,14 @@ ExecHashJoin(HashJoinState *node)
 	{
 		if (node->hj_NeedNew)
 		{
+			elog(INFO, "Fetching new probe tuple.");
 			/*
 			 * If we don't have a tuple, decide on which relation we need to get, and get it.
-			 * We will always start with inner (fromInner == true)
+			 * We will always start with outer (hj_FromInner == false)
 			 */
 			if (node->hj_FromInner) 
 			{
+				elog(INFO, "Fetching from inner relation.");
 				/*
 				 * Fetch a tuple from the inner relation, building its hash table in the process
 				 * Since ExecProcNode is invoked in ExecHashJoinOuterGetTuple, it does not need to be invoked again.
@@ -185,6 +194,7 @@ ExecHashJoin(HashJoinState *node)
 				/*
 				 * Fetch a tuple from the outer relation, building its hash table in the process
 				 */
+				elog(INFO, "Fetching from outer relation.");
 				probeTupleSlot = ExecHashJoinOuterGetTuple(outerNode, node, &hashvalue);
 	
 				if (TupIsNull(probeTupleSlot))
@@ -212,11 +222,13 @@ ExecHashJoin(HashJoinState *node)
 		/*
 		 * OK, scan the selected hash bucket for matches
 		 */
+		elog(INFO, "Probing build relation.");
 		for (;;)
 		{
 			curtuple = ExecScanHashBucket(node, econtext);
 			if (curtuple == NULL)
 			{
+				elog(INFO, "Probe returned no matches in the current bucket.");
 				/*
 				 * No match in the current hash bucket.
 				 * But maybe the build relation's hash table isn't completely built yet.
@@ -230,6 +242,7 @@ ExecHashJoin(HashJoinState *node)
 			/*
 			 * we've got a match, but still need to test non-hashed quals
 			 */
+			elog(INFO, "Probe returned a match.");
 			buildtuple = ExecStoreTuple(curtuple,
 									  node->hj_FromInner ? node->hj_OuterTupleSlot : node->hj_InnerTupleSlot,
 									  InvalidBuffer,
@@ -249,6 +262,7 @@ ExecHashJoin(HashJoinState *node)
 			 */
 			if (joinqual == NIL || ExecQual(joinqual, econtext, false))
 			{
+				elog(INFO, "Actual value matched, too");
 				node->hj_MatchedTuple = true;
 
 				if (otherqual == NIL || ExecQual(otherqual, econtext, false))
@@ -259,6 +273,7 @@ ExecHashJoin(HashJoinState *node)
 
 					if (isDone != ExprEndResult)
 					{
+						elog(INFO, "Returning tuple.");
 						node->js.ps.ps_TupFromTlist =
 							(isDone == ExprMultipleResult);
 						return result;
@@ -268,8 +283,10 @@ ExecHashJoin(HashJoinState *node)
 				/*
 				 * If we didn't return a tuple, set NeedNew and flip the probe-build relation.
 				 */
+				elog(INFO, "Did not return a tuple.");
 				if (node->js.jointype == JOIN_IN)
 				{
+					elog(INFO, "Need to fetch more.");
 					node->hj_NeedNew = true;
 					node->hj_FromInner = !node->hj_FromInner;
 					break;		/* out of loop over hash bucket */
@@ -289,16 +306,19 @@ HashJoinState *
 ExecInitHashJoin(HashJoin *node, EState *estate)
 {
 	HashJoinState *hjstate;
-	Plan	   *outerNode;
-	Hash	   *hashNode;
+	Hash	   *outerNode;
+	Hash	   *innerNode;
 	List	   *lclauses;
 	List	   *rclauses;
 	List	   *hoperators;
 	ListCell   *l;
 
+	elog(INFO, "Initiating hash join");
+
 	/*
 	 * create state structure
 	 */
+	elog(INFO, "Creating state structure");
 	hjstate = makeNode(HashJoinState);
 	hjstate->js.ps.plan = (Plan *) node;
 	hjstate->js.ps.state = estate;
@@ -313,16 +333,22 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	/*
 	 * initialize child expressions
 	 */
+	elog(INFO, "Initializing child expressions");
+	elog(INFO, "Initializing target list");
 	hjstate->js.ps.targetlist = (List *)
 		ExecInitExpr((Expr *) node->join.plan.targetlist,
 					 (PlanState *) hjstate);
+	elog(INFO, "Initializing qualifiers");
 	hjstate->js.ps.qual = (List *)
 		ExecInitExpr((Expr *) node->join.plan.qual,
 					 (PlanState *) hjstate);
+	elog(INFO, "Initializing join type");
 	hjstate->js.jointype = node->join.jointype;
+	elog(INFO, "Initializing join qualifiers");
 	hjstate->js.joinqual = (List *)
 		ExecInitExpr((Expr *) node->join.joinqual,
 					 (PlanState *) hjstate);
+	elog(INFO, "Initializing hash clauses");
 	hjstate->hashclauses = (List *)
 		ExecInitExpr((Expr *) node->hashclauses,
 					 (PlanState *) hjstate);
@@ -330,17 +356,19 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	/*
 	 * initialize child nodes
 	 */
-	outerNode = outerPlan(node);
-	hashNode = (Hash *) innerPlan(node);
+	elog(INFO, "Initializing child nodes");
+	outerNode = (Hash *) outerPlan(node);
+	innerNode = (Hash *) innerPlan(node);
 
-	outerPlanState(hjstate) = ExecInitNode(outerNode, estate);
-	innerPlanState(hjstate) = ExecInitNode((Plan *) hashNode, estate);
+	outerPlanState(hjstate) = ExecInitNode((Plan *) outerNode, estate);
+	innerPlanState(hjstate) = ExecInitNode((Plan *) innerNode, estate);
 
 #define HASHJOIN_NSLOTS 3
 
 	/*
 	 * tuple table initialization
 	 */
+	elog(INFO, "Initializing tuple tables");
 	ExecInitResultTupleSlot(estate, &hjstate->js.ps);
 	hjstate->hj_OuterTupleSlot = ExecInitExtraTupleSlot(estate);
 
@@ -348,8 +376,10 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	{
 		case JOIN_INNER:
 		case JOIN_IN:
+			elog(INFO, "inner join");
 			break;
 		case JOIN_LEFT:
+			elog(INFO, "left join");
 			hjstate->hj_NullInnerTupleSlot =
 				ExecInitNullTupleSlot(estate,
 								 ExecGetResultType(innerPlanState(hjstate)));
@@ -357,6 +387,7 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 		default:
 			elog(ERROR, "unrecognized join type: %d",
 				 (int) node->join.jointype);
+			break;
 	}
 
 	/*
@@ -366,6 +397,7 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	 * the hash join node uses ExecScanHashBucket() to get at the contents of
 	 * the hash table.	-cim 6/9/91
 	 */
+	elog(INFO, "voodoo block");
 	{
 		HashState  *hashstate = (HashState *) innerPlanState(hjstate);
 		TupleTableSlot *slot = hashstate->ps.ps_ResultTupleSlot;
@@ -376,17 +408,27 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	/*
 	 * initialize tuple type and projection info
 	 */
+	elog(INFO, "Initializing tuple type");
 	ExecAssignResultTypeFromTL(&hjstate->js.ps);
+	elog(INFO, "Initializing projection info");
 	ExecAssignProjectionInfo(&hjstate->js.ps);
 
+	elog(INFO, "Initializing slot descriptors.");
+	elog(INFO, "Outer plan state is %X", outerPlanState(hjstate));
 	ExecSetSlotDescriptor(hjstate->hj_OuterTupleSlot,
 						  ExecGetResultType(outerPlanState(hjstate)),
+						  false);
+	elog(INFO, "Inner plan state is %X", innerPlanState(hjstate));
+	ExecSetSlotDescriptor(hjstate->hj_InnerTupleSlot,
+						  ExecGetResultType(innerPlanState(hjstate)),
 						  false);
 
 	/*
 	 * initialize hash-specific info
 	 */
+	elog(INFO, "Initializing hash-state info");
 	hjstate->hj_InnerTable = NULL;
+	hjstate->hj_OuterTable = NULL;
 	hjstate->hj_FirstOuterTupleSlot = NULL;
 
 	hjstate->hj_CurHashValue = 0;
@@ -399,6 +441,7 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	 * of the hash operator OIDs, in preparation for looking up the hash
 	 * functions to use.
 	 */
+	elog(INFO, "Deconstructing hash clauses");
 	lclauses = NIL;
 	rclauses = NIL;
 	hoperators = NIL;
@@ -414,6 +457,7 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 		rclauses = lappend(rclauses, lsecond(fstate->args));
 		hoperators = lappend_oid(hoperators, hclause->opno);
 	}
+	elog(INFO, "Initializing hash clauses");
 	hjstate->hj_OuterHashKeys = lclauses;
 	hjstate->hj_InnerHashKeys = rclauses;
 	hjstate->hj_HashOperators = hoperators;
@@ -427,6 +471,7 @@ ExecInitHashJoin(HashJoin *node, EState *estate)
 	hjstate->hj_InnerNotEmpty = false;
 	hjstate->hj_OuterNotEmpty = false;
 
+	elog(INFO, "Initialization complete.");
 	return hjstate;
 }
 
@@ -518,11 +563,12 @@ ExecHashJoinOuterGetTuple(HashState *outerNode,
 			ExprContext *econtext = hjstate->js.ps.ps_ExprContext;
 
 			if (hjstate->hj_FromInner)
-				econtext->ecxt_innertuple = slot;
-			else 
 				econtext->ecxt_outertuple = slot;
+			else
+				econtext->ecxt_innertuple = slot;
+
 			*hashvalue = ExecHashGetHashValue(hashtable, econtext,
-											  hjstate->hj_FromInner? hjstate->hj_OuterHashKeys : hjstate->hj_InnerHashKeys);
+											  hjstate->hj_FromInner ? hjstate->hj_OuterHashKeys : hjstate->hj_InnerHashKeys);
 
 			/* remember probe relation is not empty for possible rescan */
 			if (hjstate->hj_FromInner)
