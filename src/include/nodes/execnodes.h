@@ -1127,13 +1127,21 @@ typedef struct HashJoinState
 	List	   *hj_HashOperators;		/* list of operator OIDs */
 	TupleTableSlot *hj_OuterTupleSlot;
 	TupleTableSlot *hj_InnerTupleSlot;
-	TupleTableSlot *hj_NullInnerTupleSlot;
-	TupleTableSlot *hj_FirstOuterTupleSlot;
-	bool		hj_FromInner;
+	TupleTableSlot *hj_NullBuildTupleSlot;
+	TupleTableSlot *hj_FirstProbeTupleSlot;
+	bool		hj_ProbeFromInner;
 	bool		hj_NeedNew;	
 	bool		hj_MatchedTuple;
 	bool		hj_InnerNotEmpty;
-	bool		hj_OuterNotEmpty;	
+	bool		hj_OuterNotEmpty;
+
+	/*
+	 * CS448 Summary Information
+	 */
+	int hjstat_outernum;
+	int hjstat_innernum;
+	int hjstat_outerresult;
+	int hjstat_innerresult;
 } HashJoinState;
 
 

@@ -69,14 +69,15 @@ ExecHash(HashState *node)
 	 * get each inner tuples and insert into the hash table (or temp files)
 	 */
 	slot = ExecProcNode(outerNode);
-	if (TupIsNull(slot))
-		return NULL;
+	if (TupIsNull(slot)) return NULL;
 	hashtable->totalTuples += 1;
-	/* We have to compute the hash value */
+	/*
+	 * We have to compute the hash value.
+	 */
 	econtext->ecxt_innertuple = slot;
 	hashvalue = ExecHashGetHashValue(hashtable, econtext, hashkeys);
 	ExecHashTableInsert(hashtable, ExecFetchSlotTuple(slot), hashvalue);
-	
+
 	/*
 	 * Return the hashed tuple.
 	 */
@@ -148,6 +149,7 @@ ExecInitHash(Hash *node, EState *estate)
 
 	/*
 	 * initialize child nodes
+	 * the InnerPlan here is empty.
 	 */
 	outerPlanState(hashstate) = ExecInitNode(outerPlan(node), estate);
 
@@ -691,7 +693,6 @@ ExecHashGetHashValue(HashJoinTable hashtable,
 	}
 
 	MemoryContextSwitchTo(oldContext);
-
 	return hashkey;
 }
 
@@ -745,7 +746,7 @@ ExecScanHashBucket(HashJoinState *hjstate,
 				   ExprContext *econtext)
 {
 	List	   *hjclauses = hjstate->hashclauses;
-	HashJoinTable hashtable = hjstate->hj_FromInner ? hjstate->hj_OuterTable : hjstate->hj_InnerTable;
+	HashJoinTable hashtable = hjstate->hj_ProbeFromInner ? hjstate->hj_OuterTable : hjstate->hj_InnerTable;
 	HashJoinTuple hashTuple = hjstate->hj_CurTuple;
 	uint32		hashvalue = hjstate->hj_CurHashValue;
 
@@ -767,11 +768,15 @@ ExecScanHashBucket(HashJoinState *hjstate,
 
 			/* insert hashtable's tuple into exec slot so ExecQual sees it */
 			inntuple = ExecStoreTuple(heapTuple,
-									  hjstate->hj_FromInner ? hjstate->hj_OuterTupleSlot : hjstate->hj_InnerTupleSlot,
+									  hjstate->hj_ProbeFromInner ? hjstate->hj_OuterTupleSlot : hjstate->hj_InnerTupleSlot,
 									  InvalidBuffer,
 									  false);	/* do not pfree */
-			econtext->ecxt_innertuple = inntuple;
 
+			if (hjstate->hj_ProbeFromInner) {
+				econtext->ecxt_outertuple = inntuple;
+			} else {
+				econtext->ecxt_innertuple = inntuple;
+			}
 			/* reset temp memory each time to avoid leaks from qual expr */
 			ResetExprContext(econtext);
 
