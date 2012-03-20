@@ -35,23 +35,38 @@ static void ExecHashIncreaseNumBatches(HashJoinTable hashtable);
 
 
 /* ----------------------------------------------------------------
- *		ExecHash, CS448
- * 		
- * 		Your implementation of ExecHash should obtain tuple from 
- * 		its input, insert the tuple in to the hash table, and 
- * 		return the tuple to its caller.
+ *		ExecHash
+ *
+ *		stub for pro forma compliance
  * ----------------------------------------------------------------
  */
 TupleTableSlot *
 ExecHash(HashState *node)
 {
-	
+	elog(ERROR, "Hash node does not support ExecProcNode call convention");
+	return NULL;
+}
+
+/* ----------------------------------------------------------------
+ *		MultiExecHash
+ *
+ *		build hash table for hashjoin, doing partitioning if more
+ *		than one batch is required.
+ * ----------------------------------------------------------------
+ */
+Node *
+MultiExecHash(HashState *node)
+{
 	PlanState  *outerNode;
 	List	   *hashkeys;
 	HashJoinTable hashtable;
 	TupleTableSlot *slot;
 	ExprContext *econtext;
 	uint32		hashvalue;
+
+	/* must provide our own instrumentation support */
+	if (node->ps.instrument)
+		InstrStartNode(node->ps.instrument);
 
 	/*
 	 * get state info from node
@@ -66,38 +81,31 @@ ExecHash(HashState *node)
 	econtext = node->ps.ps_ExprContext;
 
 	/*
-	 * get each inner tuples and insert into the hash table (or temp files)
+	 * get all inner tuples and insert into the hash table (or temp files)
 	 */
-	slot = ExecProcNode(outerNode);
-	if (TupIsNull(slot)) return NULL;
-	hashtable->totalTuples += 1;
-	/*
-	 * We have to compute the hash value.
-	 */
-	econtext->ecxt_innertuple = slot;
-	hashvalue = ExecHashGetHashValue(hashtable, econtext, hashkeys);
-	ExecHashTableInsert(hashtable, ExecFetchSlotTuple(slot), hashvalue);
+	for (;;)
+	{
+		slot = ExecProcNode(outerNode);
+		if (TupIsNull(slot))
+			break;
+		hashtable->totalTuples += 1;
+		/* We have to compute the hash value */
+		econtext->ecxt_innertuple = slot;
+		hashvalue = ExecHashGetHashValue(hashtable, econtext, hashkeys);
+		ExecHashTableInsert(hashtable, ExecFetchSlotTuple(slot), hashvalue);
+	}
+
+	/* must provide our own instrumentation support */
+	if (node->ps.instrument)
+		InstrStopNodeMulti(node->ps.instrument, hashtable->totalTuples);
 
 	/*
-	 * Return the hashed tuple.
+	 * We do not return the hash table directly because it's not a subtype of
+	 * Node, and so would violate the MultiExecProcNode API.  Instead, our
+	 * parent Hashjoin node is expected to know how to fish it out of our node
+	 * state.  Ugly but not really worth cleaning up, since Hashjoin knows
+	 * quite a bit more about Hash besides that.
 	 */
-	return slot;
-}
-
-/* ----------------------------------------------------------------
- *		MultiExecHash
- *
- *		build hash table for hashjoin, doing partitioning if more
- *		than one batch is required.
- * ----------------------------------------------------------------
- * 		CS448
- * 		
- * 		This is no longer needed for a symmetric hash join.
- * ---------------------------------------------------------------- 
- */
-Node *
-MultiExecHash(HashState *node)
-{
 	return NULL;
 }
 
@@ -149,7 +157,6 @@ ExecInitHash(Hash *node, EState *estate)
 
 	/*
 	 * initialize child nodes
-	 * the InnerPlan here is empty.
 	 */
 	outerPlanState(hashstate) = ExecInitNode(outerPlan(node), estate);
 
@@ -693,6 +700,7 @@ ExecHashGetHashValue(HashJoinTable hashtable,
 	}
 
 	MemoryContextSwitchTo(oldContext);
+
 	return hashkey;
 }
 
@@ -746,7 +754,7 @@ ExecScanHashBucket(HashJoinState *hjstate,
 				   ExprContext *econtext)
 {
 	List	   *hjclauses = hjstate->hashclauses;
-	HashJoinTable hashtable = hjstate->hj_ProbeFromInner ? hjstate->hj_OuterTable : hjstate->hj_InnerTable;
+	HashJoinTable hashtable = hjstate->hj_HashTable;
 	HashJoinTuple hashTuple = hjstate->hj_CurTuple;
 	uint32		hashvalue = hjstate->hj_CurHashValue;
 
@@ -768,15 +776,11 @@ ExecScanHashBucket(HashJoinState *hjstate,
 
 			/* insert hashtable's tuple into exec slot so ExecQual sees it */
 			inntuple = ExecStoreTuple(heapTuple,
-									  hjstate->hj_ProbeFromInner ? hjstate->hj_OuterTupleSlot : hjstate->hj_InnerTupleSlot,
+									  hjstate->hj_HashTupleSlot,
 									  InvalidBuffer,
 									  false);	/* do not pfree */
+			econtext->ecxt_innertuple = inntuple;
 
-			if (hjstate->hj_ProbeFromInner) {
-				econtext->ecxt_outertuple = inntuple;
-			} else {
-				econtext->ecxt_innertuple = inntuple;
-			}
 			/* reset temp memory each time to avoid leaks from qual expr */
 			ResetExprContext(econtext);
 

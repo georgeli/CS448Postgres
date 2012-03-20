@@ -1438,7 +1438,6 @@ create_mergejoin_plan(PlannerInfo *root,
 	return join_plan;
 }
 
-/* CS448 */
 static HashJoin *
 create_hashjoin_plan(PlannerInfo *root,
 					 HashPath *best_path,
@@ -1450,8 +1449,7 @@ create_hashjoin_plan(PlannerInfo *root,
 	List	   *otherclauses;
 	List	   *hashclauses;
 	HashJoin   *join_plan;
-	Hash	   *left_hash_plan;
-	Hash	   *right_hash_plan;
+	Hash	   *hash_plan;
 
 	/* Get the join qual clauses (in plain expression form) */
 	if (IS_OUTER_JOIN(best_path->jpath.jointype))
@@ -1491,17 +1489,13 @@ create_hashjoin_plan(PlannerInfo *root,
 	/*
 	 * Build the hash node and hash join node.
 	 */
-	/*
-	 * 448: Added code to turn the outer_plan into the left_hash_plan Hash node.
-	 */
-	left_hash_plan = make_hash(outer_plan);
-	right_hash_plan = make_hash(inner_plan);
+	hash_plan = make_hash(inner_plan);
 	join_plan = make_hashjoin(tlist,
 							  joinclauses,
 							  otherclauses,
 							  hashclauses,
-							  (Plan *) left_hash_plan,
-							  (Plan *) right_hash_plan,
+							  outer_plan,
+							  (Plan *) hash_plan,
 							  best_path->jpath.jointype);
 
 	copy_path_costsize(&join_plan->join.plan, &best_path->jpath.path);

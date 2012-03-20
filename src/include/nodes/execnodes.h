@@ -1084,27 +1084,23 @@ typedef struct MergeJoinState
 /* ----------------
  *	 HashJoinState information
  *
- *		hj_InnerTable			hash table for the inner relation
+ *		hj_HashTable			hash table for the hashjoin
  *								(NULL if table not built yet)
- *		hj_OuterTable			hash table for the outer relation
- *								(NULL if table not built yet)
- *		hj_CurHashValue			hash value for current probe tuple
- *		hj_CurBucketNo			bucket# for current probe tuple
- *		hj_CurTuple				last tuple matched with the current probe
+ *		hj_CurHashValue			hash value for current outer tuple
+ *		hj_CurBucketNo			bucket# for current outer tuple
+ *		hj_CurTuple				last inner tuple matched to current outer
  *								tuple, or NULL if starting search
  *								(CurHashValue, CurBucketNo and CurTuple are
  *								 undefined if OuterTupleSlot is empty!)
  *		hj_OuterHashKeys		the outer hash keys in the hashjoin condition
  *		hj_InnerHashKeys		the inner hash keys in the hashjoin condition
  *		hj_HashOperators		the join operators in the hashjoin condition
- *		hj_OuterTupleSlot		tuple slot for outer hashed tuples
- *		hj_InnerTupleSlot		tuple slot for inner hashed tuples
+ *		hj_OuterTupleSlot		tuple slot for outer tuples
+ *		hj_HashTupleSlot		tuple slot for hashed tuples
  *		hj_NullInnerTupleSlot	prepared null tuple for left outer joins
  *		hj_FirstOuterTupleSlot	first tuple retrieved from outer plan
- *		hj_FromInner			true if the current probe tuple is from the inner relation.
- *		hj_NeedNew				true if need new outer tuple on next call
- *		hj_MatchedTuple			true if found a join match for current outer
- *		hj_InnerNotEmpty		true if inner relation known not empty
+ *		hj_NeedNewOuter			true if need new outer tuple on next call
+ *		hj_MatchedOuter			true if found a join match for current outer
  *		hj_OuterNotEmpty		true if outer relation known not empty
  * ----------------
  */
@@ -1117,8 +1113,7 @@ typedef struct HashJoinState
 {
 	JoinState	js;				/* its first field is NodeTag */
 	List	   *hashclauses;	/* list of ExprState nodes */
-	HashJoinTable hj_InnerTable;
-	HashJoinTable hj_OuterTable;
+	HashJoinTable hj_HashTable;
 	uint32		hj_CurHashValue;
 	int			hj_CurBucketNo;
 	HashJoinTuple hj_CurTuple;
@@ -1126,22 +1121,12 @@ typedef struct HashJoinState
 	List	   *hj_InnerHashKeys;		/* list of ExprState nodes */
 	List	   *hj_HashOperators;		/* list of operator OIDs */
 	TupleTableSlot *hj_OuterTupleSlot;
-	TupleTableSlot *hj_InnerTupleSlot;
-	TupleTableSlot *hj_NullBuildTupleSlot;
-	TupleTableSlot *hj_FirstProbeTupleSlot;
-	bool		hj_ProbeFromInner;
-	bool		hj_NeedNew;	
-	bool		hj_MatchedTuple;
-	bool		hj_InnerNotEmpty;
+	TupleTableSlot *hj_HashTupleSlot;
+	TupleTableSlot *hj_NullInnerTupleSlot;
+	TupleTableSlot *hj_FirstOuterTupleSlot;
+	bool		hj_NeedNewOuter;
+	bool		hj_MatchedOuter;
 	bool		hj_OuterNotEmpty;
-
-	/*
-	 * CS448 Summary Information
-	 */
-	int hjstat_outernum;
-	int hjstat_innernum;
-	int hjstat_outerresult;
-	int hjstat_innerresult;
 } HashJoinState;
 
 
