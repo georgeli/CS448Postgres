@@ -190,10 +190,12 @@ set_base_rel_pathlists(PlannerInfo *root)
 static void
 set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
+	elog(DEBUG1, "set_plain_rel_pathlist: root = %x, rel = %x, rte = %x\n", root, rel, rte);
 	/* Mark rel with estimated output rows, width, etc */
 	set_baserel_size_estimates(root, rel);
 
 	/* Test any partial indexes of rel for applicability */
+	elog(DEBUG1, "set_plain_rel_pathlist: checking for partial indices\n");
 	check_partial_indexes(root, rel);
 
 	/*
@@ -201,6 +203,7 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	 * quals that are OR-of-AND structures.  If so, add them to the rel's
 	 * restriction list, and recompute the size estimates.
 	 */
+	elog(DEBUG1, "set_plain_rel_pathlist: checking restrict conditions \n");
 	if (create_or_index_quals(root, rel))
 		set_baserel_size_estimates(root, rel);
 

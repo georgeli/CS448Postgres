@@ -1488,6 +1488,7 @@ cost_hashjoin(HashPath *path, PlannerInfo *root)
 void
 cost_qual_eval(QualCost *cost, List *quals)
 {
+	elog(DEBUG1, "cost_qual_eval: start\n");
 	ListCell   *l;
 
 	cost->startup = 0;
@@ -1507,10 +1508,12 @@ cost_qual_eval(QualCost *cost, List *quals)
 		 */
 		if (qual && IsA(qual, RestrictInfo))
 		{
+			elog(DEBUG1, "cost_qual_eval: Is a RestrictInfo node\n");
 			RestrictInfo *restrictinfo = (RestrictInfo *) qual;
 
 			if (restrictinfo->eval_cost.startup < 0)
 			{
+				elog(DEBUG1, "cost_qual_eval: evaluating node cost\n");
 				restrictinfo->eval_cost.startup = 0;
 				restrictinfo->eval_cost.per_tuple = 0;
 				cost_qual_eval_walker((Node *) restrictinfo->clause,
@@ -1521,10 +1524,12 @@ cost_qual_eval(QualCost *cost, List *quals)
 		}
 		else
 		{
+			elog(DEBUG1, "cost_qual_eval: bare expression\n");
 			/* If it's a bare expression, must always do it the hard way */
 			cost_qual_eval_walker(qual, cost);
 		}
 	}
+	elog(DEBUG1, "cost_qual_eval: done. cost->startup: %f, cost->per_tuple: %f\n", cost->startup, cost->per_tuple);
 }
 
 static bool
@@ -1693,22 +1698,25 @@ approx_selectivity(PlannerInfo *root, List *quals, JoinType jointype)
 void
 set_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel)
 {
+	elog(DEBUG1, "set_baserel_size_estimates: start\n");
 	double		nrows;
 
 	/* Should only be applied to base relations */
 	Assert(rel->relid > 0);
-
+	elog(DEBUG1, "set_baserel_size_estimates: calculating selectivity\n");
 	nrows = rel->tuples *
 		clauselist_selectivity(root,
 							   rel->baserestrictinfo,
 							   0,
 							   JOIN_INNER);
 
+	elog(DEBUG1, "set_baserel_size_estimates: forcing sane value on selectivity\n");
 	rel->rows = clamp_row_est(nrows);
 
 	cost_qual_eval(&rel->baserestrictcost, rel->baserestrictinfo);
 
 	set_rel_width(root, rel);
+	elog(DEBUG1, "set_baserel_size_estimates: done\n");
 }
 
 /*
@@ -1923,6 +1931,7 @@ set_function_size_estimates(PlannerInfo *root, RelOptInfo *rel)
 static void
 set_rel_width(PlannerInfo *root, RelOptInfo *rel)
 {
+	elog(DEBUG1, "set_rel_width: start\n");
 	int32		tuple_width = 0;
 	ListCell   *tllist;
 
@@ -1974,6 +1983,7 @@ set_rel_width(PlannerInfo *root, RelOptInfo *rel)
 	}
 	Assert(tuple_width >= 0);
 	rel->width = tuple_width;
+	elog(DEBUG1, "set_rel_width: done. rel->width: %d\n", rel->width);
 }
 
 /*
