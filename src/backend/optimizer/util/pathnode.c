@@ -409,6 +409,23 @@ create_seqscan_path(PlannerInfo *root, RelOptInfo *rel)
 	return pathnode;
 }
 
+Path *
+create_sorted_seqscan_path(PlannerInfo *root, RelOptInfo *rel, ListCell* pathKey) {
+
+	Path *pathnode = makeNode(Path);
+
+	pathnode->pathtype = T_SeqScan;
+	pathnode->parent = rel;
+	pathnode->pathkeys = list_make1(pathKey->data.ptr_value);
+
+	/*
+	 * TODO: change the cost function to add the cost of a sort.
+	 */
+	cost_seqscan(pathnode, root, rel);
+
+	return pathnode;
+}
+
 /*
  * create_index_path
  *	  Creates a path node for an index scan.

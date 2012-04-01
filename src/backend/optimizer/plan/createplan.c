@@ -33,7 +33,7 @@
 #include "parser/parse_expr.h"
 #include "utils/lsyscache.h"
 #include "utils/syscache.h"
-
+#include "nodes/print.h"
 
 static Scan *create_scan_plan(PlannerInfo *root, Path *best_path);
 static List *build_relation_tlist(RelOptInfo *rel);
@@ -141,6 +141,15 @@ create_plan(PlannerInfo *root, Path *best_path)
 	switch (best_path->pathtype)
 	{
 		case T_SeqScan:
+			plan = (Plan *) create_scan_plan(root, best_path);
+			if (best_path->pathkeys != NULL && best_path->pathkeys->length > 0) {
+				/*
+				 * This is a sorted seqscan path.
+				 * We build the sort node first.
+				 */
+				plan = (Plan *) make_sort_from_pathkeys(root, plan, best_path->pathkeys);
+			}
+			break;
 		case T_IndexScan:
 		case T_BitmapHeapScan:
 		case T_TidScan:
@@ -727,7 +736,6 @@ create_seqscan_plan(PlannerInfo *root, Path *best_path,
 							 scan_relid);
 
 	copy_path_costsize(&scan_plan->plan, best_path);
-
 	return scan_plan;
 }
 

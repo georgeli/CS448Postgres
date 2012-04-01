@@ -14,11 +14,8 @@
  */
 
 #include "postgres.h"
-
 #include "nodes/makefuncs.h"
-#ifdef OPTIMIZER_DEBUG
 #include "nodes/print.h"
-#endif
 #include "optimizer/clauses.h"
 #include "optimizer/cost.h"
 #include "optimizer/geqo.h"
@@ -66,6 +63,10 @@ static void subquery_push_qual(Query *subquery,
 static void recurse_push_qual(Node *setOp, Query *topquery,
 				  RangeTblEntry *rte, Index rti, Node *qual);
 
+static void print_relids(Relids relids);
+static void print_restrictclauses(PlannerInfo *root, List *clauses);
+static void print_path(PlannerInfo *root, Path *path, int indent);
+void debug_print_rel(PlannerInfo *root, RelOptInfo *rel);
 
 /*
  * make_one_rel
@@ -133,6 +134,29 @@ set_base_rel_pathlists(PlannerInfo *root)
 {
 	Index		rti;
 
+	if (root->sort_pathkeys == NULL) {
+		printf("CS448 **** Interesting Order from Order By clauses: ()\n");
+	} else {
+		printf("CS448 **** Interesting Order from Order By clauses: ");
+		print_pathkeys(root->sort_pathkeys, root->parse->rtable);
+	}
+	if (root->group_pathkeys == NULL) {
+		printf("CS448 **** Interesting Order from Group By clauses: ()\n");
+	} else {
+		printf("CS448 **** Interesting Order from Group By clauses: ");
+		print_pathkeys(root->group_pathkeys, root->parse->rtable);
+	}
+	if (root->hasJoinRTEs) {
+		printf("CS448 **** Interesting Order from Join predicates: ()\n");
+	} else {
+		/*
+		 * This thing has joins.
+		 * Build pathkey lists for these joins.
+		 */
+		printf("CS448 **** Interesting Order from Join predicates: ");
+		print_pathkeys(root->equi_key_list, root->parse->rtable);
+	}
+
 	/*
 	 * Note: because we call expand_inherited_rtentry inside the loop, it's
 	 * quite possible for the base_rel_array to be enlarged while the loop
@@ -174,6 +198,7 @@ set_base_rel_pathlists(PlannerInfo *root)
 		else
 		{
 			/* Plain relation */
+			printf("Possible Paths for Relation %u:\n", rti);
 			set_plain_rel_pathlist(root, rel, rte);
 		}
 
@@ -190,12 +215,12 @@ set_base_rel_pathlists(PlannerInfo *root)
 static void
 set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 {
-	elog(DEBUG1, "set_plain_rel_pathlist: root = %x, rel = %x, rte = %x\n", root, rel, rte);
+	ListCell   *l, *i, *k;
+
 	/* Mark rel with estimated output rows, width, etc */
 	set_baserel_size_estimates(root, rel);
 
 	/* Test any partial indexes of rel for applicability */
-	elog(DEBUG1, "set_plain_rel_pathlist: checking for partial indices\n");
 	check_partial_indexes(root, rel);
 
 	/*
@@ -203,7 +228,6 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	 * quals that are OR-of-AND structures.  If so, add them to the rel's
 	 * restriction list, and recompute the size estimates.
 	 */
-	elog(DEBUG1, "set_plain_rel_pathlist: checking restrict conditions \n");
 	if (create_or_index_quals(root, rel))
 		set_baserel_size_estimates(root, rel);
 
@@ -218,6 +242,16 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 	/* Consider sequential scan */
 	add_path(rel, create_seqscan_path(root, rel));
 
+	/* build one for each pathkey in the group by or order by clauses */
+	foreach (i, root->query_pathkeys) {
+		add_path(rel, create_sorted_seqscan_path(root, rel, i));
+	}
+	/* build one for each pathkey in the equi-key list for joins */
+	foreach (i, root->equi_key_list) {
+		add_path(rel, create_sorted_seqscan_path(root, rel, i));
+	}
+	foreach(l, rel->pathlist) print_path(root, lfirst(l), 1);
+
 	/* Consider index scans */
 	create_index_paths(root, rel);
 
@@ -226,6 +260,7 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* Now find the cheapest of the paths for this rel */
 	set_cheapest(rel);
+	printf("\n");
 }
 
 /*
@@ -978,7 +1013,6 @@ recurse_push_qual(Node *setOp, Query *topquery,
  *			DEBUG SUPPORT
  *****************************************************************************/
 
-#ifdef OPTIMIZER_DEBUG
 
 static void
 print_relids(Relids relids)
@@ -1158,5 +1192,3 @@ debug_print_rel(PlannerInfo *root, RelOptInfo *rel)
 	printf("\n");
 	fflush(stdout);
 }
-
-#endif   /* OPTIMIZER_DEBUG */

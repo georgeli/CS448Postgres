@@ -28,6 +28,7 @@ extern void set_cheapest(RelOptInfo *parent_rel);
 extern void add_path(RelOptInfo *parent_rel, Path *new_path);
 
 extern Path *create_seqscan_path(PlannerInfo *root, RelOptInfo *rel);
+extern Path *create_sorted_seqscan_path(PlannerInfo *root, RelOptInfo *rel, ListCell* pathKey);
 extern IndexPath *create_index_path(PlannerInfo *root,
 				  IndexOptInfo *index,
 				  List *clause_groups,
