@@ -31,7 +31,6 @@
 #include "parser/parse_expr.h"
 #include "rewrite/rewriteManip.h"
 
-
 /* These parameters are set by GUC */
 bool		constraint_exclusion = false;
 bool		enable_geqo = false;	/* just in case GUC doesn't set it */
@@ -244,11 +243,43 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 	/* build one for each pathkey in the group by or order by clauses */
 	foreach (i, root->query_pathkeys) {
-		add_path(rel, create_sorted_seqscan_path(root, rel, i));
+		/* Filter out the relation that does not have the pathkey specified */
+		List *pathkey = (List *) lfirst(i);
+		foreach (k, pathkey)
+		{
+			PathKeyItem *item = (PathKeyItem *) lfirst(k);
+			Var		   *var = (Var *) item->key;
+			RangeTblEntry *rte;
+
+			Assert(var->varno > 0 &&
+				   (int) var->varno <= list_length(root->parse->rtable));
+			rte = rt_fetch(var->varno, root->parse->rtable);
+			if (var->varno == rel->relid) {
+				add_path(rel, create_sorted_seqscan_path(root, rel, i));
+			}
+		}
 	}
 	/* build one for each pathkey in the equi-key list for joins */
 	foreach (i, root->equi_key_list) {
-		add_path(rel, create_sorted_seqscan_path(root, rel, i));
+		List *pathkey = (List *) lfirst(i);
+		int should_add = 0, key_count = 0;
+		foreach (k, pathkey)
+		{
+			PathKeyItem *item = (PathKeyItem *) lfirst(k);
+			Var		   *var = (Var *) item->key;
+			RangeTblEntry *rte;
+
+			Assert(var->varno > 0 &&
+				   (int) var->varno <= list_length(root->parse->rtable));
+			rte = rt_fetch(var->varno, root->parse->rtable);
+			if (var->varno == rel->relid) {
+				should_add = 1;
+			}
+			key_count += 1;
+		}
+		if (should_add == 1 && key_count > 1) {
+			add_path(rel, create_sorted_seqscan_path(root, rel, i));
+		}
 	}
 	foreach(l, rel->pathlist) print_path(root, lfirst(l), 1);
 
